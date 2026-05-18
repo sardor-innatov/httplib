@@ -2,6 +2,8 @@ package httplib
 
 import (
 	"bufio"
+	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -16,9 +18,10 @@ type Request struct {
 	Path    string
 	Version string
 	Headers Headers
-	Body    []byte
+	Body    io.Reader
 	Proto   string
 	URL     *url.URL
+	ctx     context.Context
 }
 
 func (s *Server) ParseRequest(conn net.Conn) (*Request, error) {
@@ -124,7 +127,7 @@ func (s *Server) ParseRequest(conn net.Conn) (*Request, error) {
 			reader.ReadString('\n')
 		}
 
-		req.Body = bodyBuffer
+		req.Body = io.NopCloser(bytes.NewReader(bodyBuffer))
 		return req, nil
 	}
 
@@ -149,7 +152,7 @@ func (s *Server) ParseRequest(conn net.Conn) (*Request, error) {
 		return nil, NewError(StatusInternalServerError, fmt.Sprintf("failed to read body: %v (read %d of %d)", err, n, contentLength))
 	}
 
-	req.Body = body
+	req.Body = io.NopCloser(bytes.NewReader(body))
 
 	return req, nil
 }
@@ -196,4 +199,26 @@ func (r Request) Cookies(key string) []string {
 	}
 
 	return nil
+}
+
+func (r *Request) Context() context.Context {
+
+	if r.ctx != nil {
+		return r.ctx
+	}
+
+	return context.Background()
+}
+
+func (r *Request) WithContext(ctx context.Context) *Request {
+	if ctx == nil {
+		panic("nil context")
+	}
+
+	req2 := new(Request)
+
+	*req2 = *r
+
+	req2.ctx = ctx
+	return req2
 }
