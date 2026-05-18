@@ -62,6 +62,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	}
 
 	conn.SetReadDeadline(time.Time{})
+	resp.Conn = &conn
 
-	s.Handler.ServeHTTP(conn, req)
+	s.Handler.ServeHTTP(*resp, req)
 }

@@ -1,15 +1,14 @@
 package httplib
 
 import (
-	"net"
 	"strings"
 )
 
 type Handler interface {
-	ServeHTTP(conn net.Conn, r *Request)
+	ServeHTTP(conn Response, r *Request)
 }
 
-type HandlerFunc func(w net.Conn, req *Request)
+type HandlerFunc func(w Response, req *Request)
 
 type route struct {
 	method   string
@@ -74,7 +73,7 @@ func (r *Router) DELETE(path string, handler HandlerFunc) {
 	})
 }
 
-func (r *Router) ServeHTTP(conn net.Conn, req *Request) {
+func (r *Router) ServeHTTP(w Response, req *Request) {
 	resp := NewResponse()
 
 	for _, route := range r.routes {
@@ -86,13 +85,13 @@ func (r *Router) ServeHTTP(conn net.Conn, req *Request) {
 			continue
 		}
 		req.params = params
-		route.handler(conn, req)
+		route.handler(w, req)
 		return
 	}
 
 	resp.StatusCode = StatusNotFound
 	resp.ReasonPhrase = "Not Found"
-	resp.Write(conn)
+	resp.Write(*w.Conn)
 }
 
 func match(routeSegments []string, requestPath string) (map[string]string, bool) {
