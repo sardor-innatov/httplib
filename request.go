@@ -14,14 +14,16 @@ import (
 )
 
 type Request struct {
-	Method  string
-	Path    string
-	Version string
-	Headers Headers
-	Body    io.Reader
-	Proto   string
-	URL     *url.URL
-	ctx     context.Context
+	Method        string
+	Path          string
+	Version       string
+	Headers       Headers
+	Body          io.ReadCloser
+	Proto         string
+	URL           *url.URL
+	RemoteAddr string
+	ctx           context.Context
+	params        map[string]string
 }
 
 func (s *Server) ParseRequest(conn net.Conn) (*Request, error) {
@@ -57,6 +59,7 @@ func (s *Server) ParseRequest(conn net.Conn) (*Request, error) {
 	rawURL := "http://" + host + req.Path
 
 	req.URL, err = url.Parse(rawURL)
+	req.RemoteAddr = conn.RemoteAddr().String()
 
 	// 2. Headers
 
@@ -221,4 +224,13 @@ func (r *Request) WithContext(ctx context.Context) *Request {
 
 	req2.ctx = ctx
 	return req2
+}
+
+func (r *Request) PathValue(key string) string {
+	value, exists := r.params[key]
+	if !exists {
+		return ""
+	}
+
+	return value
 }

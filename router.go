@@ -1,67 +1,119 @@
 package httplib
 
-import "net"
+import (
+	"net"
+	"strings"
+)
 
 type Handler interface {
-	ServeHTTP(conn net.Conn, 	r *Request)
+	ServeHTTP(conn net.Conn, r *Request)
 }
 
 type HandlerFunc func(w net.Conn, req *Request)
 
+type route struct {
+	method   string
+	pattern  string
+	segments []string // pre-split pattern: "/users/{id}" → ["users", "{id}"]
+	handler  HandlerFunc
+}
+
 type Router struct {
-	routes map[string]map[string]HandlerFunc
+	routes []route
 }
 
 func NewRouter() *Router {
 	return &Router{
-		routes: map[string]map[string]HandlerFunc{
-			"GET":    make(map[string]HandlerFunc),
-			"POST":   make(map[string]HandlerFunc),
-			"PUT":    make(map[string]HandlerFunc),
-			"PATCH":  make(map[string]HandlerFunc),
-			"DELETE": make(map[string]HandlerFunc),
-		},
+		routes: make([]route, 0),
 	}
 }
 
 func (r *Router) GET(path string, handler HandlerFunc) {
-	r.routes["GET"][path] = handler
+
+	r.routes = append(r.routes, route{
+		method:   "GET",
+		pattern:  path,
+		segments: strings.Split(path, "/"),
+		handler:  handler,
+	})
 }
 
 func (r *Router) POST(path string, handler HandlerFunc) {
-	r.routes["POST"][path] = handler
+	r.routes = append(r.routes, route{
+		method:   "POST",
+		pattern:  path,
+		segments: strings.Split(path, "/"),
+		handler:  handler,
+	})
 }
 
 func (r *Router) PUT(path string, handler HandlerFunc) {
-	r.routes["PUT"][path] = handler
+	r.routes = append(r.routes, route{
+		method:   "PUT",
+		pattern:  path,
+		segments: strings.Split(path, "/"),
+		handler:  handler,
+	})
 }
 
 func (r *Router) PATCH(path string, handler HandlerFunc) {
-	r.routes["PATCH"][path] = handler
+	r.routes = append(r.routes, route{
+		method:   "PATCH",
+		pattern:  path,
+		segments: strings.Split(path, "/"),
+		handler:  handler,
+	})
 }
 
 func (r *Router) DELETE(path string, handler HandlerFunc) {
-	r.routes["DElETE"][path] = handler
+	r.routes = append(r.routes, route{
+		method:   "DELETE",
+		pattern:  path,
+		segments: strings.Split(path, "/"),
+		handler:  handler,
+	})
 }
 
 func (r *Router) ServeHTTP(conn net.Conn, req *Request) {
 	resp := NewResponse()
 
-	methodRoutes, exists := r.routes[req.Method]
-	if !exists {
-		resp.StatusCode = StatusMethodNotAllowed
-		resp.ReasonPhrase = "Method Not Allowed"
-		resp.Write(conn)
+	for _, route := range r.routes {
+		if route.method != req.Method {
+			continue
+		}
+		params, ok := match(route.segments, req.URL.Path)
+		if !ok {
+			continue
+		}
+		req.params = params
+		route.handler(conn, req)
 		return
 	}
 
-	handler, exists := methodRoutes[req.URL.Path]
-	if !exists {
-		resp.StatusCode = StatusNotFound
-		resp.ReasonPhrase = "Not Found"
-		resp.Write(conn)
-		return
+	resp.StatusCode = StatusNotFound
+	resp.ReasonPhrase = "Not Found"
+	resp.Write(conn)
+}
+
+func match(routeSegments []string, requestPath string) (map[string]string, bool) {
+
+	reqSegments := strings.Split(requestPath, "/")
+
+	if len(routeSegments) != len(reqSegments) {
+		return nil, false
 	}
 
-	handler(conn, req)
+	params := make(map[string]string)
+	for i, seg := range routeSegments {
+		if strings.HasPrefix(seg, "{") && strings.HasSuffix(seg, "}") {
+
+			key := seg[1 : len(seg)-1]
+			params[key] = reqSegments[i]
+
+		} else if seg != reqSegments[i] {
+
+			return nil, false
+		}
+	}
+	return params, true
 }

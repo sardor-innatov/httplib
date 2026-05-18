@@ -11,6 +11,7 @@ type Response struct {
 	ReasonPhrase string
 	Header       Headers
 	Body         []byte
+	Conn         *net.Conn
 }
 
 func NewResponse() *Response {
